@@ -1,0 +1,22 @@
+# g-capm: Capital Asset Pricing Model Data Repository
+# Python Requirements File
+# Install with: pip install -r requirements.txt
+
+# Core Data Analysis
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Statistical Analysis
+statsmodels>=0.14.0
+scipy>=1.10.0
+
+# Visualization
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Optional: Jupyter Notebooks
+jupyter>=1.0.0
+ipython>=8.0.0
+
+# Optional: Additional Analysis Tools
+scikit-learn>=1.3.0  # For machine learning analysis
