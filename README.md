@@ -68,8 +68,8 @@ mkt_data = pd.read_csv('mkt_timing.csv', parse_dates=['Date'])
 tsla_data = pd.read_csv('TSLA_daily.csv', parse_dates=['Date'])
 
 # Calculate beta using covariance method
-covariance = tsla_data['return_tsla'].cov(tsla_data['return_sp500'])
-market_variance = tsla_data['return_sp500'].var()
+covariance = tsla_data['TSLA'].cov(tsla_data['SPX_TR'])
+market_variance = tsla_data['SPX_TR'].var()
 beta = covariance / market_variance
 
 print(f"Tesla Beta: {beta:.4f}")
