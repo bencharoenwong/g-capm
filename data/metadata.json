@@ -1,0 +1,180 @@
+{
+  "generated_at": "2026-01-14T23:56:18.531024",
+  "datasets": {
+    "tsla_daily": {
+      "description": "Tesla daily returns vs S&P 500 Total Return",
+      "frequency": "daily",
+      "columns": {
+        "date": "Trading date (ISO 8601 format YYYY-MM-DD)",
+        "return_tsla": "Tesla daily return (decimal format, 0.01 = 1%)",
+        "return_sp500_tr": "S&P 500 Total Return daily return (decimal format)"
+      },
+      "source": "Financial data provider",
+      "use_cases": [
+        "Beta estimation",
+        "CAPM analysis",
+        "Single-stock risk"
+      ],
+      "cleaning_applied": [
+        "Date format standardized to ISO 8601",
+        "Column names converted to snake_case",
+        "BOM removed",
+        "Dates sorted ascending"
+      ]
+    },
+    "tsla_monthly": {
+      "description": "Tesla monthly returns vs S&P 500 Total Return",
+      "frequency": "monthly",
+      "columns": {
+        "date": "Month end date (ISO 8601)",
+        "return_tsla": "Tesla monthly return (decimal format)",
+        "return_sp500_tr": "S&P 500 Total Return monthly return (decimal format)"
+      },
+      "source": "Financial data provider",
+      "use_cases": [
+        "Beta estimation (monthly)",
+        "Long-term trend analysis"
+      ],
+      "cleaning_applied": [
+        "Date format standardized to ISO 8601",
+        "Column names converted to snake_case"
+      ]
+    },
+    "mkt_timing": {
+      "description": "S&P 500 market data with risk-free rates (1991-2020)",
+      "frequency": "monthly",
+      "columns": {
+        "date": "Month end date (ISO 8601)",
+        "spx_close": "S&P 500 closing price (index points)",
+        "spx_ret": "S&P 500 price return (decimal, NA for first row)",
+        "spx_tr_close": "S&P 500 Total Return Index close (includes dividends)",
+        "spx_tr_ret": "S&P 500 Total Return return (decimal, NA for first row)",
+        "rf": "Risk-free rate (monthly, decimal)"
+      },
+      "source": "Financial data provider",
+      "use_cases": [
+        "Market timing analysis",
+        "CAPM (market returns + rf)",
+        "Historical backtesting"
+      ],
+      "cleaning_applied": [
+        "Date format standardized to ISO 8601",
+        "Column names converted to snake_case",
+        "Dates sorted ascending"
+      ]
+    },
+    "returns_daily": {
+      "description": "Multi-asset daily returns (wide format): BTC, ETH, S&P 500, Small Cap",
+      "frequency": "daily",
+      "columns": {
+        "date": "Trading date (ISO 8601)",
+        "return_btc": "Bitcoin daily return (decimal)",
+        "return_eth": "Ethereum daily return (decimal)",
+        "return_sp500": "S&P 500 daily return (decimal)",
+        "return_ssc": "Small Cap daily return (decimal)"
+      },
+      "source": "Crypto exchanges and financial data providers",
+      "use_cases": [
+        "Crypto CAPM analysis",
+        "Cross-asset correlation",
+        "Diversification analysis",
+        "Time-varying correlation analysis (IMPORTANT!)"
+      ],
+      "cleaning_applied": [
+        "Date format verified as ISO 8601",
+        "Dates sorted ascending"
+      ]
+    },
+    "returns_daily_melt": {
+      "description": "Multi-asset daily returns (long format): Same data as returns_daily but reshaped",
+      "frequency": "daily",
+      "columns": {
+        "date": "Trading date (ISO 8601)",
+        "variable": "Asset identifier (return_btc, return_eth, return_sp500, return_ssc)",
+        "value": "Return value (decimal)"
+      },
+      "source": "Crypto exchanges and financial data providers",
+      "use_cases": [
+        "Panel regression",
+        "Time series modeling",
+        "ggplot-style visualization"
+      ],
+      "cleaning_applied": [
+        "Date format verified as ISO 8601",
+        "Sorted by date and variable"
+      ]
+    },
+    "benchmarking": {
+      "description": "Fama-French factor returns and sector portfolios (monthly, 2010-)",
+      "frequency": "monthly",
+      "columns": {
+        "date": "Month end date (ISO 8601)",
+        "A": "Portfolio A return (decimal)",
+        "B": "Portfolio B return (decimal)",
+        "C": "Portfolio C return (decimal)",
+        "D": "Portfolio D return (decimal)",
+        "E": "Portfolio E return (decimal)",
+        "F": "Portfolio F return (decimal)",
+        "G": "Portfolio G return (decimal)",
+        "H": "Portfolio H return (decimal)",
+        "mkt_rf": "Market excess return (Rm - Rf) (decimal)",
+        "SMB": "Small Minus Big factor (size) (decimal)",
+        "HML": "High Minus Low factor (value) (decimal)",
+        "rf": "Risk-free rate (monthly, decimal)",
+        "WML": "Winners Minus Losers factor (momentum) (decimal)"
+      },
+      "source": "Kenneth French Data Library (Fama-French factors)",
+      "use_cases": [
+        "Fama-French 3-factor model",
+        "Carhart 4-factor model",
+        "Performance attribution",
+        "Factor strategy analysis"
+      ],
+      "cleaning_applied": [
+        "Date format verified as ISO 8601",
+        "Mkt_RF renamed to mkt_rf",
+        "RF renamed to rf",
+        "Dates sorted ascending"
+      ]
+    },
+    "test_sptr": {
+      "description": "S&P 500 Total Return adjusted close prices",
+      "frequency": "monthly",
+      "columns": {
+        "date": "Trading date (ISO 8601)",
+        "adj_close": "Adjusted closing price (total return index)"
+      },
+      "source": "Financial data provider",
+      "use_cases": [
+        "Return calculation",
+        "Matches spx_tr_close in mkt_timing.csv"
+      ],
+      "cleaning_applied": [
+        "Date format verified as ISO 8601",
+        "Removed asterisks from column name"
+      ]
+    },
+    "reit_altdata": {
+      "description": "Australian REIT alternative data with business descriptions (2020 snapshot)",
+      "frequency": "snapshot",
+      "columns": {
+        "date": "Snapshot date (2020-03-31)",
+        "company": "Company name/ticker",
+        "description": "Business description (text)",
+        "market_cap_bin": "Market cap category (small/mid/large)",
+        "return": "Period return (decimal)"
+      },
+      "source": "Australian Securities Exchange filings",
+      "use_cases": [
+        "REIT analysis",
+        "Alternative data / text mining",
+        "NLP for investment signals",
+        "Market cap factor analysis"
+      ],
+      "cleaning_applied": [
+        "Column names converted to lowercase",
+        "Date format verified"
+      ]
+    }
+  }
+}
