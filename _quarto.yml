@@ -1,0 +1,186 @@
+project:
+  type: book
+  output-dir: docs
+
+book:
+  title: "Quantitative Finance Research with Python"
+  subtitle: "A Rigorous Introduction to CAPM, Factor Models, and Statistical Methodology"
+  author: "g-capm Research Program"
+  date: today
+
+  cover-image: images/cover.png
+  favicon: images/favicon.png
+
+  repo-url: https://github.com/bencharoenwong/g-capm
+  repo-actions: [edit, issue]
+
+  search: true
+
+  chapters:
+    - index.qmd
+    - preface.qmd
+
+    - part: "Part 0: Research Foundations"
+      chapters:
+        - chapters/00-research-workflow.qmd
+        - chapters/00-ai-assistant.qmd
+        - chapters/00-python-setup.qmd
+        - chapters/00-statistical-rigor.qmd
+
+    - part: "Part I: Data and Statistics"
+      chapters:
+        - chapters/01-exploratory-data-analysis.qmd
+        - chapters/02-time-series-fundamentals.qmd
+        - chapters/03-stationarity-testing.qmd
+        - chapters/04-correlation-causation.qmd
+
+    - part: "Part II: CAPM Theory and Practice"
+      chapters:
+        - chapters/05-capm-theory.qmd
+        - chapters/06-beta-estimation.qmd
+        - chapters/07-statistical-inference.qmd
+        - chapters/08-time-varying-beta.qmd
+        - chapters/09-capm-limitations.qmd
+
+    - part: "Part III: Factor Models"
+      chapters:
+        - chapters/10-factor-model-theory.qmd
+        - chapters/11-fama-french-three-factor.qmd
+        - chapters/12-momentum-carhart-four-factor.qmd
+        - chapters/13-factor-timing-strategies.qmd
+
+    - part: "Part IV: Advanced Topics"
+      chapters:
+        - chapters/14-crypto-market-analysis.qmd
+        - chapters/15-regime-detection.qmd
+        - chapters/16-alternative-data.qmd
+        - chapters/17-portfolio-construction.qmd
+
+    - part: "Part V: Research Methodology"
+      chapters:
+        - chapters/18-backtesting-pitfalls.qmd
+        - chapters/19-publication-quality-research.qmd
+        - chapters/20-reproducibility.qmd
+
+    - part: "Part VI: Career Development"
+      chapters:
+        - chapters/21-research-portfolio.qmd
+        - chapters/22-interview-preparation.qmd
+        - chapters/23-continuing-education.qmd
+
+    - references.qmd
+
+  appendices:
+    - appendices/A-statistical-tests.qmd
+    - appendices/B-python-reference.qmd
+    - appendices/C-data-dictionary.qmd
+    - appendices/D-research-checklist.qmd
+    - appendices/E-ai-prompts.qmd
+    - appendices/F-common-pitfalls.qmd
+    - appendices/G-notation-glossary.qmd
+    - appendices/H-solutions.qmd
+
+format:
+  html:
+    theme:
+      light: [cosmo, theme-research-light.scss]
+      dark: [cosmo, theme-research-dark.scss]
+
+    # Code display
+    code-fold: false              # Show code by default (researchers want to see it!)
+    code-summary: "Show/Hide Code"
+    code-tools: true
+    code-copy: true
+    code-link: true
+    code-line-numbers: true       # Line numbers for discussion
+
+    # Navigation
+    toc: true
+    toc-depth: 3
+    toc-expand: 2
+
+    number-sections: true
+    number-depth: 3
+
+    # Cross-references
+    crossref:
+      chapters: true
+      eq-prefix: "Eq."
+      fig-prefix: "Figure"
+      tbl-prefix: "Table"
+      sec-prefix: "Section"
+
+    # Links
+    link-external-icon: true
+    link-external-newwindow: true
+
+    # Citations
+    citations-hover: true
+    footnotes-hover: true
+
+    # Callouts (for warnings, research notes)
+    callout-appearance: default
+    callout-icon: true
+
+    # Syntax highlighting
+    highlight-style: github
+
+    # Custom CSS
+    css: custom-research.css
+
+    # MathJax for equations
+    html-math-method: mathjax
+
+  pdf:
+    documentclass: book
+    papersize: letter
+    fontsize: 11pt
+    toc: true
+    toc-depth: 2
+    number-sections: true
+    colorlinks: true
+    geometry:
+      - margin=1in
+      - heightrounded
+    include-in-header:
+      text: |
+        \usepackage{fvextra}
+        \DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,commandchars=\\\{\}}
+        \usepackage{amsmath}
+        \usepackage{amssymb}
+        \usepackage{booktabs}
+
+execute:
+  # Code execution settings
+  freeze: auto           # Only re-run if source changes
+  cache: true            # Cache expensive computations
+  echo: true             # Show code (researchers need to see methodology!)
+  warning: true          # Show warnings (important for research!)
+  message: false         # Hide routine messages
+  error: false           # Don't stop on errors (will show error in output)
+
+  # Set working directory
+  daemon: false
+
+# Python kernel
+jupyter: python3
+
+# Bibliography
+bibliography: references.bib
+csl: journal-of-finance.csl  # Academic citation style
+
+# Metadata
+lang: en
+description: |
+  A rigorous introduction to quantitative finance research using Python.
+  Covers CAPM, factor models, time series analysis, and research methodology
+  with emphasis on statistical rigor and common pitfalls.
+
+keywords:
+  - quantitative finance
+  - CAPM
+  - factor models
+  - time series analysis
+  - Python
+  - research methodology
+  - statistical inference

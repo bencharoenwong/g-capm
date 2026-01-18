@@ -24,6 +24,13 @@ __author__ = "g-capm Project"
 from .data import load_data, list_datasets, DataLoader
 from .capm import calculate_beta, estimate_capm, CAPMAnalyzer
 from .stats import rolling_correlation, time_varying_beta, statistical_tests
+from .timeseries_tests import (
+    test_stationarity,
+    test_autocorrelation,
+    test_heteroscedasticity,
+    check_all_assumptions,
+    StationarityTestResult,
+)
 
 # Factors and portfolio coming in later phases
 # from .factors import FactorAnalyzer, fama_french_3factor, carhart_4factor
@@ -41,4 +48,10 @@ __all__ = [
     'rolling_correlation',
     'time_varying_beta',
     'statistical_tests',
+    # Time series tests (for research rigor)
+    'test_stationarity',
+    'test_autocorrelation',
+    'test_heteroscedasticity',
+    'check_all_assumptions',
+    'StationarityTestResult',
 ]

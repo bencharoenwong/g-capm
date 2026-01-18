@@ -1,0 +1,814 @@
+---
+title: "Statistical Rigor in Quantitative Research"
+subtitle: "Common Pitfalls and How to Avoid Them"
+---
+
+## Why This Chapter Exists
+
+**Most quant finance tutorials teach you to:**
+- Run regressions
+- Calculate returns
+- Build portfolios
+
+**They DON'T teach you:**
+- When those regressions are invalid
+- How lookahead bias destroys backtests
+- Why your "significant" result is probably not
+
+**This chapter teaches you to be a RESEARCHER, not just a coder.**
+
+---
+
+## The Seven Deadly Sins of Quant Research
+
+### 1. Ignoring Time Series Properties
+
+#### The Sin
+
+```python
+# WRONG: Treating returns as i.i.d. without checking
+import statsmodels.api as sm
+
+y = asset_returns
+X = market_returns
+X = sm.add_constant(X)
+
+model = sm.OLS(y, X).fit()  # 😱 Did you check stationarity?
+print(f"Beta: {model.params[1]:.4f}")
+```
+
+**Why This Is Wrong:**
+- Returns may have **autocorrelation** (violates OLS assumption)
+- **Heteroscedasticity** (variance changes over time)
+- **Regime changes** (relationship isn't stable)
+- **Unit roots** (non-stationary series)
+
+#### The Fix
+
+```python
+# RIGHT: Test assumptions before regression
+import gcapm
+from statsmodels.tsa.stattools import adfuller, acf
+from statsmodels.stats.diagnostic import het_white
+
+# 1. Test for stationarity
+def test_stationarity(series, name):
+    """
+    Augmented Dickey-Fuller test for unit root.
+    H0: Series has unit root (non-stationary)
+    """
+    result = adfuller(series.dropna())
+    print(f"\n{name} Stationarity Test:")
+    print(f"  ADF Statistic: {result[0]:.4f}")
+    print(f"  P-value: {result[1]:.4f}")
+    if result[1] < 0.05:
+        print(f"  ✓ Reject H0: Series is stationary")
+    else:
+        print(f"  ✗ Cannot reject H0: Series may have unit root")
+        print(f"  ⚠️  WARNING: OLS may be invalid!")
+    return result[1] < 0.05
+
+# Test both series
+asset_stationary = test_stationarity(asset_returns, "Asset Returns")
+market_stationary = test_stationarity(market_returns, "Market Returns")
+
+if not (asset_stationary and market_stationary):
+    print("\n⚠️  WARNING: Non-stationary series detected!")
+    print("Consider:")
+    print("  1. Differencing the series")
+    print("  2. Using cointegration tests")
+    print("  3. Checking for structural breaks")
+
+# 2. Test for autocorrelation
+acf_values = acf(asset_returns.dropna(), nlags=20)
+if any(abs(acf_values[1:6]) > 2/np.sqrt(len(asset_returns))):
+    print("\n⚠️  WARNING: Significant autocorrelation detected!")
+    print("  → Use HAC (Newey-West) standard errors")
+
+# 3. Run regression with robust errors
+model = sm.OLS(y, X).fit(cov_type='HAC', cov_kwds={'maxlags': 5})
+print(model.summary())
+```
+
+::: {.callout-important}
+## Research Rule #1
+
+**ALWAYS test for stationarity** before running time series regressions.
+
+Non-stationary series can give you:
+- Spurious correlations (R² = 0.9 when no relationship exists!)
+- Invalid standard errors (wrong confidence intervals)
+- Misleading p-values (false significance)
+
+**ADF test p-value < 0.05** → Probably safe to proceed
+**ADF test p-value > 0.05** → STOP and investigate
+:::
+
+---
+
+### 2. Lookahead Bias
+
+#### The Sin
+
+```python
+# WRONG: Using future information in backtest
+def backtest_strategy(returns):
+    # Calculate indicators
+    ma_50 = returns.rolling(50).mean()
+    ma_200 = returns.rolling(200).mean()
+
+    # Generate signals
+    signals = (ma_50 > ma_200).astype(int)  # 😱 This knows the FUTURE!
+
+    # Calculate strategy returns
+    strategy_returns = signals * returns  # Using same-period return!
+
+    return strategy_returns  # Artificially inflated performance
+```
+
+**What's Wrong:**
+- Signal at time `t` uses return at time `t`
+- In reality, you can't know `t`'s return when making decision at `t`
+- This is **lookahead bias** - you're "trading on tomorrow's news paper"
+
+#### The Fix
+
+```python
+# RIGHT: Only use past information
+def backtest_strategy_correct(returns):
+    """
+    Proper backtest with no lookahead bias.
+
+    Key principle: Signal at time t can only use data up to t-1
+    """
+    # Calculate indicators (these are correct - they look backward)
+    ma_50 = returns.rolling(50).mean()
+    ma_200 = returns.rolling(200).mean()
+
+    # Generate signals
+    signals_raw = (ma_50 > ma_200).astype(int)
+
+    # CRITICAL: Shift signals forward!
+    # Signal at time t uses data up to t-1
+    # Signal is executed at time t+1
+    signals = signals_raw.shift(1)  # ✅ Now we trade on NEXT period
+
+    # Calculate strategy returns
+    # We enter position AFTER signal, so we get NEXT period's return
+    strategy_returns = signals * returns
+
+    return strategy_returns
+
+# Even better: Be explicit about timing
+def backtest_with_explicit_timing(df):
+    """
+    Make timing crystal clear.
+    """
+    df = df.copy()
+
+    # Calculate signal using data available at time t
+    df['ma_50'] = df['returns'].rolling(50).mean()
+    df['ma_200'] = df['returns'].rolling(200).mean()
+
+    # At end of day t, we have ma_50[t] and ma_200[t]
+    df['signal_t'] = (df['ma_50'] > df['ma_200']).astype(int)
+
+    # We execute trade at START of day t+1
+    # We get the return from t+1 to t+2
+    df['position_t_plus_1'] = df['signal_t'].shift(1)
+    df['strategy_return_t_plus_1'] = df['position_t_plus_1'] * df['returns']
+
+    return df['strategy_return_t_plus_1']
+```
+
+::: {.callout-warning}
+## Lookahead Bias Detection Checklist
+
+Ask yourself:
+- [ ] Am I using return at time `t` to generate signal at time `t`?
+- [ ] Did I shift signals forward by at least 1 period?
+- [ ] Am I using any "future" data (e.g., realized volatility from future)?
+- [ ] Is my training/test split truly temporal? (no shuffling!)
+- [ ] Did I use `.shift(1)` or equivalent to avoid lookahead?
+
+**If ANY answer is "no" or "I'm not sure"**: You likely have lookahead bias!
+:::
+
+---
+
+### 3. Multiple Testing / Data Snooping
+
+#### The Sin
+
+```python
+# WRONG: Testing 100 strategies, reporting the best one
+results = []
+for window in range(10, 200, 5):  # 38 different windows
+    for threshold in np.arange(0.5, 2.0, 0.1):  # 15 thresholds
+        # That's 38 * 15 = 570 tests!
+
+        strategy = test_strategy(window, threshold)
+        sharpe = calculate_sharpe(strategy)
+        results.append({'window': window, 'threshold': threshold, 'sharpe': sharpe})
+
+best = max(results, key=lambda x: x['sharpe'])
+print(f"Best strategy: Sharpe = {best['sharpe']:.2f}")  # 😱 Overfit!
+print(f"p < 0.05, statistically significant!")  # 😱 NO IT'S NOT!
+```
+
+**What's Wrong:**
+- Tested 570 different strategies
+- By pure chance, ~28 will have p < 0.05 (570 * 0.05)
+- Reporting the "best" one is cherry-picking
+- **This is NOT a significant finding**
+
+#### The Fix
+
+```python
+# RIGHT: Bonferroni correction or out-of-sample testing
+import numpy as np
+from scipy import stats
+
+# Method 1: Bonferroni Correction
+n_tests = 570
+alpha = 0.05
+bonferroni_alpha = alpha / n_tests  # = 0.0000877
+
+print(f"After Bonferroni correction:")
+print(f"  Need p < {bonferroni_alpha:.6f} to claim significance")
+print(f"  (Much harder to achieve!)")
+
+# Method 2: Out-of-sample validation
+def proper_strategy_testing(data):
+    """
+    Split data into: training | validation | test
+    """
+    n = len(data)
+    train_end = int(n * 0.5)
+    val_end = int(n * 0.75)
+
+    train = data[:train_end]
+    validation = data[train_end:val_end]
+    test = data[val_end:]
+
+    # 1. Use TRAIN to find best parameters
+    best_params = optimize_on_train(train)  # Try 570 combinations here
+
+    # 2. Check if it works on VALIDATION
+    val_sharpe = test_strategy(validation, best_params)
+
+    if val_sharpe > threshold:
+        # 3. ONLY NOW test on TEST set (one-shot!)
+        test_sharpe = test_strategy(test, best_params)
+        print(f"Test Sharpe: {test_sharpe:.2f}")
+        return test_sharpe
+    else:
+        print("Strategy failed on validation set")
+        return None
+
+# Method 3: Walk-forward validation
+def walk_forward_validation(data, window=252):
+    """
+    Continuously refit and test out-of-sample.
+    More realistic for live trading.
+    """
+    results = []
+
+    for i in range(window, len(data), 21):  # Monthly rebalancing
+        train_data = data[i-window:i]  # Past year
+        test_data = data[i:i+21]  # Next month
+
+        # Fit on train
+        params = optimize_on_train(train_data)
+
+        # Test on out-of-sample
+        oos_return = test_strategy(test_data, params)
+        results.append(oos_return)
+
+    return pd.Series(results)
+```
+
+::: {.callout-important}
+## Research Rule #2: Multiple Testing
+
+If you test **n** different hypotheses:
+
+**Bonferroni correction**: Use α/n instead of α
+- **Example**: 100 tests → need p < 0.0005 (not 0.05!)
+
+**Better approach**:
+1. Optimize on training set
+2. Validate on validation set
+3. ONE FINAL TEST on holdout test set
+
+**Report**:
+- How many strategies you tested
+- Your selection process
+- Out-of-sample results (not in-sample!)
+:::
+
+---
+
+### 4. Survivorship Bias
+
+#### The Sin
+
+```python
+# WRONG: Using current S&P 500 constituents to backtest
+sp500_current = ['AAPL', 'MSFT', 'GOOGL', ...]  # Today's winners
+
+# Backtest strategy from 2000-2020
+returns = load_data(sp500_current, start='2000', end='2020')
+strategy_returns = backtest(returns)
+
+print(f"Strategy Sharpe: {sharpe(strategy_returns):.2f}")  # 😱 Biased!
+```
+
+**What's Wrong:**
+- These companies survived to 2024 (winners!)
+- Missing all companies that went bankrupt or were delisted
+- **Survivorship bias** inflates historical performance
+
+**Example**: Enron was in S&P 500 in 2000, not today
+- Ignoring Enron = ignoring a -100% return event
+- Your backtest looks better than reality
+
+#### The Fix
+
+```python
+# RIGHT: Use point-in-time constituents or acknowledge bias
+# Option 1: Use point-in-time S&P 500 composition (if available)
+def get_sp500_constituents_at_date(date):
+    """
+    Return S&P 500 members as of specific date.
+    (Requires historical constituent data)
+    """
+    pass  # Need to purchase this data
+
+# Option 2: Acknowledge the bias explicitly
+print("""
+⚠️  SURVIVORSHIP BIAS WARNING
+
+This backtest uses current S&P 500 constituents.
+
+Limitations:
+- Excludes companies that failed/were delisted
+- Likely overstates historical performance
+- Results are biased upward
+
+Use with caution. Real performance would be lower.
+
+Mitigation:
+- [ ] Use point-in-time constituent data (if available)
+- [ ] Test on total market index instead (VTI vs SPY)
+- [ ] Acknowledge bias in reporting
+- [ ] Compare to benchmark with same bias
+""")
+```
+
+::: {.callout-warning}
+## Survivorship Bias Checklist
+
+- [ ] Am I using current universe to backtest historical periods?
+- [ ] Have I acknowledged survivorship bias if present?
+- [ ] Is my data "survivor-free" (includes delisted stocks)?
+- [ ] Am I comparing to a benchmark with the same bias?
+- [ ] Have I quantified the potential impact?
+
+**Our datasets**:
+- ✓ `returns_daily.csv`: Fixed universe (BTC, ETH, SP500, SSC)
+- ⚠️ `benchmarking.csv`: Survivor-selected portfolios (acknowledge this!)
+- ✓ `tsla_daily.csv`: Single stock (no survivorship issue)
+:::
+
+---
+
+### 5. Overfitting / In-Sample Optimization
+
+#### The Sin
+
+```python
+# WRONG: Optimize parameters to maximize in-sample Sharpe
+from scipy.optimize import minimize
+
+def negative_sharpe(params):
+    """Objective function to minimize."""
+    returns = run_strategy(params)
+    return -calculate_sharpe(returns)  # Negative because we minimize
+
+# Optimize on ALL data
+result = minimize(negative_sharpe, x0=[50, 1.5],
+                  bounds=[(10, 200), (0.5, 3.0)])
+
+print(f"Optimal params: {result.x}")
+print(f"Sharpe: {-result.fun:.2f}")  # 😱 Guaranteed to overfit!
+```
+
+**What's Wrong:**
+- Optimized to fit historical noise, not signal
+- Will fail out-of-sample
+- More parameters = more overfitting
+
+#### The Fix
+
+```python
+# RIGHT: Cross-validation or walk-forward testing
+def walk_forward_optimization(data, train_window=504, test_window=21):
+    """
+    Walk-forward optimization with expanding window.
+
+    Parameters
+    ----------
+    train_window : int
+        Minimum training period (e.g., 2 years of daily data)
+    test_window : int
+        Out-of-sample test period (e.g., 1 month)
+    """
+    oos_results = []
+
+    for i in range(train_window, len(data), test_window):
+        # Training data (expanding window)
+        train = data[:i]
+
+        # Test data (next month)
+        test = data[i:i+test_window]
+
+        # Optimize on training data
+        def neg_sharpe_train(params):
+            returns = run_strategy(train, params)
+            return -calculate_sharpe(returns)
+
+        result = minimize(neg_sharpe_train, x0=[50, 1.5])
+        optimal_params = result.x
+
+        # Test on out-of-sample data
+        oos_returns = run_strategy(test, optimal_params)
+        oos_results.append({
+            'date': data.index[i],
+            'params': optimal_params,
+            'return': oos_returns.sum(),
+            'sharpe': calculate_sharpe(oos_returns)
+        })
+
+    return pd.DataFrame(oos_results)
+
+# Compare in-sample vs out-of-sample
+oos_df = walk_forward_optimization(data)
+
+print("In-sample vs Out-of-sample:")
+print(f"  In-sample Sharpe: {in_sample_sharpe:.2f}")
+print(f"  OOS Sharpe: {oos_df['sharpe'].mean():.2f}")
+print(f"  Degradation: {in_sample_sharpe - oos_df['sharpe'].mean():.2f}")
+```
+
+::: {.callout-important}
+## Research Rule #3: In-Sample vs Out-of-Sample
+
+**Golden Rules:**
+1. **NEVER report in-sample results as your main finding**
+2. **ALWAYS show out-of-sample performance**
+3. **EXPECT degradation** (OOS performance < IS performance)
+4. **Typical degradation**: 30-50% Sharpe ratio decline
+
+**Rule of thumb**:
+- In-sample Sharpe = 2.0 → OOS Sharpe ≈ 1.0 to 1.4
+- If OOS ≈ IS: Either lucky or robust
+- If OOS << IS: Overfit, back to drawing board
+:::
+
+---
+
+### 6. Ignoring Transaction Costs
+
+#### The Sin
+
+```python
+# WRONG: Assuming you can trade for free
+signals = generate_trading_signals(data)
+trades = signals.diff()  # When signal changes
+returns = signals * market_returns
+
+sharpe = calculate_sharpe(returns)
+print(f"Strategy Sharpe: {sharpe:.2f}")  # 😱 Unrealistic!
+```
+
+**What's Wrong:**
+- Every trade has costs (commissions, spread, slippage, market impact)
+- High-frequency strategies especially affected
+- Can turn profitable strategy into unprofitable one
+
+#### The Fix
+
+```python
+# RIGHT: Account for realistic transaction costs
+def apply_transaction_costs(returns, signals, cost_bps=10):
+    """
+    Apply transaction costs to strategy returns.
+
+    Parameters
+    ----------
+    returns : pd.Series
+        Strategy returns (before costs)
+    signals : pd.Series
+        Position signals (-1, 0, 1)
+    cost_bps : float
+        Transaction cost in basis points (10 bps = 0.1%)
+
+    Returns
+    -------
+    pd.Series
+        Returns after transaction costs
+    """
+    # Detect trades (position changes)
+    trades = signals.diff().abs()
+
+    # Transaction cost on each trade
+    costs = trades * (cost_bps / 10000)  # Convert bps to decimal
+
+    # Subtract costs from returns
+    returns_after_costs = returns - costs
+
+    return returns_after_costs
+
+# Calculate with different cost assumptions
+for cost in [5, 10, 20, 50]:  # Different cost scenarios
+    returns_net = apply_transaction_costs(returns, signals, cost_bps=cost)
+    sharpe = calculate_sharpe(returns_net)
+    print(f"Cost = {cost} bps: Sharpe = {sharpe:.2f}")
+
+# Analysis of turnover
+annual_turnover = trades.sum() / len(returns) * 252
+print(f"\nAnnual turnover: {annual_turnover:.1f}x")
+print(f"Cost impact at 10bps: {annual_turnover * 0.001:.1%}")
+```
+
+::: {.callout-warning}
+## Transaction Cost Assumptions
+
+**Realistic costs** (retail trader):
+- Stocks: 5-10 bps (half spread + commission)
+- Options: 20-50 bps
+- Futures: 2-5 bps
+- Crypto: 10-30 bps (exchanges vary)
+
+**Institutional** (better execution):
+- Stocks: 2-5 bps
+- But: larger trades have market impact
+
+**Rule**: If your strategy trades daily, assume at least 10 bps per trade
+:::
+
+---
+
+### 7. P-Hacking / Cherry-Picking Results
+
+#### The Sin
+
+```python
+# WRONG: Try many specifications, report the "significant" one
+results = []
+
+# Try different dependent variables
+for y in ['returns', 'excess_returns', 'log_returns']:
+    # Try different independent variables
+    for X_vars in [['mkt'], ['mkt', 'smb'], ['mkt', 'smb', 'hml']]:
+        # Try different lags
+        for lag in [0, 1, 5, 21]:
+            # Try different sub-periods
+            for period in periods:
+                model = run_regression(y, X_vars, lag, period)
+                results.append({
+                    'spec': (y, X_vars, lag, period),
+                    'coef': model.params['mkt'],
+                    'pval': model.pvalues['mkt']
+                })
+
+# Find "significant" result
+significant = [r for r in results if r['pval'] < 0.05]
+print(f"Found {len(significant)} significant results!")  # 😱 P-hacking!
+```
+
+**What's Wrong:**
+- Tried many specifications
+- Only reported the ones that "worked"
+- **This is p-hacking / specification searching**
+- Your "significant" result is probably noise
+
+#### The Fix
+
+```python
+# RIGHT: Pre-register your analysis plan
+"""
+PRE-REGISTRATION (Before looking at data)
+
+Research Question:
+    Does Bitcoin have positive CAPM alpha?
+
+Hypothesis:
+    H0: α = 0
+    H1: α > 0
+
+Data:
+    - Source: Cleaned returns_daily.csv
+    - Period: 2016-03-10 to 2021-08-30
+    - Frequency: Daily
+
+Model Specification:
+    R_btc(t) - R_f(t) = α + β * (R_mkt(t) - R_f(t)) + ε(t)
+
+    Where:
+    - R_btc: Bitcoin return
+    - R_mkt: S&P 500 return
+    - R_f: Risk-free rate (assume 0 for daily)
+
+Method:
+    - OLS regression with HAC standard errors
+    - Newey-West lags = 5
+
+Significance Level:
+    α = 0.05 (one-sided test)
+
+Decision Rule:
+    Reject H0 if p-value < 0.05 AND α > 0
+
+Planned Robustness Checks:
+    1. Exclude 2020 (COVID period)
+    2. Use monthly data instead of daily
+    3. Compare to equal-weighted crypto index
+"""
+
+# Now run the analysis (following the plan!)
+def run_preregistered_analysis():
+    """Run exactly what was pre-registered."""
+    import gcapm
+
+    df = gcapm.load_data('returns_daily')
+
+    # Exactly as specified
+    y = df['return_btc']  # As pre-registered
+    X = df['return_sp500']  # As pre-registered
+
+    # HAC errors with 5 lags (as pre-registered)
+    results = gcapm.estimate_capm(y, X)
+
+    # Report ALL results (not just if significant)
+    print("Pre-registered Analysis Results:")
+    print(results.summary())
+
+    # Decision
+    if results.pvalue < 0.05 and results.alpha > 0:
+        print("\n✓ Reject H0: Bitcoin has positive alpha")
+    else:
+        print("\n✗ Cannot reject H0: No evidence of positive alpha")
+
+    # Run planned robustness checks (ALL of them)
+    robustness_checks()
+
+    return results
+```
+
+::: {.callout-important}
+## Research Rule #4: Specification Searching
+
+**Best practice: Pre-registration**
+1. Write down your analysis plan BEFORE looking at data
+2. Commit to a specification
+3. Run it
+4. Report results (even if not significant!)
+
+**If you must explore**:
+- Report ALL specifications you tried
+- Use multiple testing correction
+- Clearly label exploratory vs confirmatory
+- Validate on out-of-sample data
+
+**Red flags in papers**:
+- "We tried several specifications and found..."
+- Results change dramatically with small changes
+- No robustness checks
+- Only positive results reported
+:::
+
+---
+
+## Research Quality Checklist
+
+Before claiming any result:
+
+### Statistical Validity
+- [ ] Tested for stationarity (ADF test)
+- [ ] Checked for autocorrelation (ACF plot)
+- [ ] Tested for heteroscedasticity (White test)
+- [ ] Used appropriate standard errors (HAC if needed)
+- [ ] Checked residual diagnostics
+
+### Temporal Integrity
+- [ ] No lookahead bias (shifted signals appropriately)
+- [ ] Proper train/validation/test split
+- [ ] Used only past data for each decision
+- [ ] Checked date alignment
+
+### Multiple Testing
+- [ ] Applied Bonferroni or other correction
+- [ ] Reported number of tests performed
+- [ ] Validated on out-of-sample data
+- [ ] Used walk-forward or cross-validation
+
+### Bias Awareness
+- [ ] Acknowledged survivorship bias
+- [ ] Accounted for transaction costs
+- [ ] Considered market impact
+- [ ] Noted any data limitations
+
+### Reproducibility
+- [ ] Code is version controlled
+- [ ] Random seeds set
+- [ ] Environment documented (requirements.txt)
+- [ ] Data sources documented
+- [ ] Analysis can be re-run
+
+### Reporting
+- [ ] Reported in-sample AND out-of-sample
+- [ ] Showed degradation (IS vs OOS)
+- [ ] Included negative results
+- [ ] Discussed limitations
+- [ ] Provided uncertainty estimates (SE, CI)
+
+---
+
+## Summary
+
+::: {.callout-note}
+## Core Principles for Rigorous Research
+
+1. **Test assumptions before analysis**
+   - Stationarity, autocorrelation, heteroscedasticity
+
+2. **Respect causality**
+   - No lookahead bias
+   - Proper temporal ordering
+
+3. **Account for multiple testing**
+   - Bonferroni correction or OOS validation
+
+4. **Be honest about limitations**
+   - Survivorship bias
+   - Transaction costs
+   - Data quality issues
+
+5. **Validate out-of-sample**
+   - In-sample results are not findings
+   - Walk-forward or time-series CV
+
+6. **Document everything**
+   - Pre-register if possible
+   - Version control
+   - Report all results (not just significant ones)
+
+7. **Think like a researcher, not a salesperson**
+   - Your job is to find truth, not "prove" a hypothesis
+   - Negative results are valuable
+   - Limitations make your work more credible, not less
+:::
+
+---
+
+## Next Steps
+
+In the following chapters, we'll apply these principles to:
+
+- **Chapter 1**: Exploratory data analysis (done right)
+- **Chapter 2**: Time series fundamentals
+- **Chapter 3**: Stationarity testing in practice
+- **Chapter 4**: Correlation vs causation
+
+**Every analysis will include:**
+- ✓ Assumption testing
+- ✓ Bias checks
+- ✓ Out-of-sample validation
+- ✓ Limitation discussion
+
+**This is how professional researchers work. Let's learn it from day one.**
+
+---
+
+::: {.callout-tip}
+## AI Research Assistant
+
+When using AI to help with your research:
+
+**Good prompts:**
+> "I'm running a CAPM regression. What assumptions should I test first?"
+>
+> "How do I check for lookahead bias in my backtest?"
+>
+> "What's the appropriate multiple testing correction for 50 tests?"
+
+**Verify AI suggestions:**
+- Ask AI to explain WHY a correction is needed
+- Ask for potential pitfalls in the suggested approach
+- Cross-reference with statistical textbooks
+- **Never blindly trust AI on statistical methodology**
+
+See Appendix E for comprehensive AI prompts for rigorous research.
+:::
